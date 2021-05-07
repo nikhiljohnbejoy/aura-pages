@@ -1,0 +1,2 @@
+import { dew } from './CNAME.dew.js';
+export default dew();

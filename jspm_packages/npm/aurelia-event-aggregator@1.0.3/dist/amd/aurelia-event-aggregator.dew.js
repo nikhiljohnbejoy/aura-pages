@@ -1,0 +1,168 @@
+var exports = {},
+    _dewExec = false;
+
+var _global = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : global;
+
+export function dew() {
+  if (_dewExec) return exports;
+  _dewExec = true;
+  define(['exports', 'aurelia-logging'], function (exports, _aureliaLogging) {
+    'use strict';
+
+    Object.defineProperty(exports, "__esModule", {
+      value: true
+    });
+    exports.EventAggregator = undefined;
+    exports.includeEventsIn = includeEventsIn;
+    exports.configure = configure;
+
+    var LogManager = _interopRequireWildcard(_aureliaLogging);
+
+    function _interopRequireWildcard(obj) {
+      if (obj && obj.__esModule) {
+        return obj;
+      } else {
+        var newObj = {};
+
+        if (obj != null) {
+          for (var key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key];
+          }
+        }
+
+        newObj.default = obj;
+        return newObj;
+      }
+    }
+
+    var logger = LogManager.getLogger('event-aggregator');
+
+    var Handler = function () {
+      function Handler(messageType, callback) {
+        (this || _global).messageType = messageType;
+        (this || _global).callback = callback;
+      }
+
+      Handler.prototype.handle = function handle(message) {
+        if (message instanceof (this || _global).messageType) {
+          (this || _global).callback.call(null, message);
+        }
+      };
+
+      return Handler;
+    }();
+
+    function invokeCallback(callback, data, event) {
+      try {
+        callback(data, event);
+      } catch (e) {
+        logger.error(e);
+      }
+    }
+
+    function invokeHandler(handler, data) {
+      try {
+        handler.handle(data);
+      } catch (e) {
+        logger.error(e);
+      }
+    }
+
+    var EventAggregator = exports.EventAggregator = function () {
+      function EventAggregator() {
+        (this || _global).eventLookup = {};
+        (this || _global).messageHandlers = [];
+      }
+
+      EventAggregator.prototype.publish = function publish(event, data) {
+        var subscribers = void 0;
+        var i = void 0;
+
+        if (!event) {
+          throw new Error('Event was invalid.');
+        }
+
+        if (typeof event === 'string') {
+          subscribers = (this || _global).eventLookup[event];
+
+          if (subscribers) {
+            subscribers = subscribers.slice();
+            i = subscribers.length;
+
+            while (i--) {
+              invokeCallback(subscribers[i], data, event);
+            }
+          }
+        } else {
+          subscribers = (this || _global).messageHandlers.slice();
+          i = subscribers.length;
+
+          while (i--) {
+            invokeHandler(subscribers[i], event);
+          }
+        }
+      };
+
+      EventAggregator.prototype.subscribe = function subscribe(event, callback) {
+        var handler = void 0;
+        var subscribers = void 0;
+
+        if (!event) {
+          throw new Error('Event channel/type was invalid.');
+        }
+
+        if (typeof event === 'string') {
+          handler = callback;
+          subscribers = (this || _global).eventLookup[event] || ((this || _global).eventLookup[event] = []);
+        } else {
+          handler = new Handler(event, callback);
+          subscribers = (this || _global).messageHandlers;
+        }
+
+        subscribers.push(handler);
+        return {
+          dispose: function dispose() {
+            var idx = subscribers.indexOf(handler);
+
+            if (idx !== -1) {
+              subscribers.splice(idx, 1);
+            }
+          }
+        };
+      };
+
+      EventAggregator.prototype.subscribeOnce = function subscribeOnce(event, callback) {
+        var sub = this.subscribe(event, function (a, b) {
+          sub.dispose();
+          return callback(a, b);
+        });
+        return sub;
+      };
+
+      return EventAggregator;
+    }();
+
+    function includeEventsIn(obj) {
+      var ea = new EventAggregator();
+
+      obj.subscribeOnce = function (event, callback) {
+        return ea.subscribeOnce(event, callback);
+      };
+
+      obj.subscribe = function (event, callback) {
+        return ea.subscribe(event, callback);
+      };
+
+      obj.publish = function (event, data) {
+        ea.publish(event, data);
+      };
+
+      return ea;
+    }
+
+    function configure(config) {
+      config.instance(EventAggregator, includeEventsIn(config.aurelia));
+    }
+  });
+  return exports;
+}
